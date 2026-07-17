@@ -25,7 +25,7 @@ jobs:
       - name: Fetch dataset
         run: |
           mkdir -p data
-          python pipeline/fetch_idx.py --output data/dataset.json --delay 0.6
+          python pipeline/fetch_idx.py --output data/dataset.json --delay 0.6 --tickers-file pipeline/tickers.txt
 
       - name: Scoring & ranking
         run: python pipeline/scoring.py
