@@ -181,6 +181,16 @@ def compute_rsi(close, period=14):
     return 100 - (100 / (1 + rs))
 
 
+def compute_stoch_rsi(rsi, period=14, k=3, d=3):
+    """Stochastic RSI: stochastic diterapkan ke nilai RSI. Return (%K, %D)."""
+    rmin = rsi.rolling(period).min()
+    rmax = rsi.rolling(period).max()
+    stoch = 100 * (rsi - rmin) / (rmax - rmin).replace(0, np.nan)
+    k_line = stoch.rolling(k).mean()
+    d_line = k_line.rolling(d).mean()
+    return k_line, d_line
+
+
 def compute_atr(df, period=14):
     prev_close = df["Close"].shift()
     tr = pd.concat(
@@ -223,6 +233,58 @@ def detect_cross(fast, slow, lookback=10):
     return 0
 
 
+def detect_patterns(df, sma50, sma200):
+    """Deteksi chart pattern berbasis aturan objektif. Return list nama pattern.
+
+    Dideteksi: Golden Cross, Death Cross, Breakout (60d + volume),
+    Breakdown, Double Bottom, Bull Flag. Pattern geometris kompleks
+    (Cup&Handle, H&S, Triangle) sengaja tidak dideteksi — rawan false positive.
+    """
+    patterns = []
+    close, vol = df["Close"], df["Volume"]
+    price = float(close.iloc[-1])
+
+    gc = detect_cross(sma50, sma200)
+    if gc == 1:
+        patterns.append("Golden Cross")
+    elif gc == -1:
+        patterns.append("Death Cross")
+
+    win = df.iloc[-60:]
+    res60 = float(win["High"].iloc[:-1].max())
+    sup60 = float(win["Low"].iloc[:-1].min())
+    vol20 = vol.rolling(20).mean().iloc[-1]
+
+    if price > res60 and vol.iloc[-1] > 1.5 * vol20:
+        patterns.append("Breakout")
+    if price < sup60:
+        patterns.append("Breakdown")
+
+    # Double Bottom: dua low mirip (<3%) berjarak >=10 bar, ada puncak >5% di antaranya,
+    # harga sekarang mendekati/melewati puncak tengah
+    lows = win["Low"].values
+    i1 = int(lows[:30].argmin())
+    i2 = 30 + int(lows[30:].argmin())
+    l1, l2 = float(lows[i1]), float(lows[i2])
+    if i2 - i1 >= 10 and max(l1, l2) > 0 and abs(l1 - l2) / max(l1, l2) < 0.03:
+        mid_peak = float(win["High"].values[i1 : i2 + 1].max())
+        if mid_peak > max(l1, l2) * 1.05 and price > mid_peak * 0.98:
+            patterns.append("Double Bottom")
+
+    # Bull Flag: rally >=15% (bar -40..-10) lalu konsolidasi sempit <=7% (10 bar terakhir)
+    if len(df) >= 40:
+        base = close.iloc[-40:-10]
+        flag = close.iloc[-10:]
+        bmin, fmin = float(base.min()), float(flag.min())
+        if bmin > 0 and fmin > 0:
+            run = (float(base.max()) - bmin) / bmin
+            flag_range = (float(flag.max()) - fmin) / fmin
+            if run >= 0.15 and flag_range <= 0.07 and price >= float(base.max()) * 0.93:
+                patterns.append("Bull Flag")
+
+    return patterns
+
+
 def pct_change_from(close, days):
     if len(close) <= days:
         return None
@@ -238,6 +300,7 @@ def compute_technicals(df):
     n = len(df)
 
     ema = {p: close.ewm(span=p, adjust=False).mean() for p in (20, 50, 100, 200)}
+    sma20 = close.rolling(20).mean()
     sma50 = close.rolling(50).mean()
     sma200 = close.rolling(200).mean() if n >= 200 else None
 
@@ -250,6 +313,9 @@ def compute_technicals(df):
     high14 = df["High"].rolling(14).max()
     stoch_k = 100 * (close - low14) / (high14 - low14).replace(0, np.nan)
     stoch_d = stoch_k.rolling(3).mean()
+
+    rsi_series = compute_rsi(close)
+    stochrsi_k, stochrsi_d = compute_stoch_rsi(rsi_series)
 
     atr, _ = compute_atr(df)
     adx = compute_adx(df)
@@ -270,20 +336,25 @@ def compute_technicals(df):
     price = last(close)
     vol_avg20 = last(volume.rolling(20).mean())
 
+    patterns = detect_patterns(df, sma50, sma200)
+
     return {
         "price": price,
         "ema20": last(ema[20]),
         "ema50": last(ema[50]),
         "ema100": last(ema[100]),
         "ema200": last(ema[200]) if n >= 200 else None,
+        "sma20": last(sma20),
         "sma50": last(sma50),
         "sma200": last(sma200) if sma200 is not None else None,
         "macd": last(macd_line),
         "macd_signal": last(macd_signal),
         "macd_hist": last(macd_line - macd_signal),
-        "rsi14": last(compute_rsi(close)),
+        "rsi14": last(rsi_series),
         "stoch_k": last(stoch_k),
         "stoch_d": last(stoch_d),
+        "stochrsi_k": last(stochrsi_k),
+        "stochrsi_d": last(stochrsi_d),
         "atr14": last(atr),
         "adx14": last(adx),
         "obv": last(obv),
@@ -297,6 +368,7 @@ def compute_technicals(df):
         "resistance_60d": clean(df["High"].iloc[-60:].max()),
         "golden_cross_recent": detect_cross(sma50, sma200) if sma200 is not None else 0,
         "macd_cross_recent": detect_cross(macd_line, macd_signal),
+        "patterns": patterns,
         "change_1m": pct_change_from(close, 21),
         "change_3m": pct_change_from(close, 63),
         "change_6m": pct_change_from(close, 126),
