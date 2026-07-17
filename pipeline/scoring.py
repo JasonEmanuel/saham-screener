@@ -401,8 +401,29 @@ def main():
     (DATA / "categories.json").write_text(json.dumps(categories, ensure_ascii=False))
     (DATA / "meta.json").write_text(json.dumps(meta, ensure_ascii=False))
 
-    print(f"[✓] Scored {len(rows)} | BUY {len(buys)} | WATCH {len(watch)} | AVOID {len(avoid)}")
+    # --- histori harian (snapshot permanen per tanggal) ---
+    hist_dir = DATA / "history"
+    hist_dir.mkdir(exist_ok=True)
+    tanggal = str(ds.get("generated_at") or meta["generated_at"])[:10]
+    snapshot = [
+        {
+            "kode": r["kode"], "rank": r["rank"], "total": r["total_score"],
+            "fund": r["score_fundamental"], "tech": r["score_technical"],
+            "rating": r["rating"], "harga": r["harga"],
+        }
+        for r in rows
+    ]
+    (hist_dir / f"{tanggal}.json").write_text(json.dumps(snapshot, ensure_ascii=False))
 
+    idx_path = hist_dir / "index.json"
+    dates = json.loads(idx_path.read_text()) if idx_path.exists() else []
+    if tanggal not in dates:
+        dates.append(tanggal)
+        dates.sort()
+    idx_path.write_text(json.dumps(dates))
+    print(f"[i] Histori tersimpan: {tanggal} ({len(dates)} hari terkumpul)")
+
+    print(f"[✓] Scored {len(rows)} | BUY {len(buys)} | WATCH {len(watch)} | AVOID {len(avoid)}")
 
 if __name__ == "__main__":
     main()
