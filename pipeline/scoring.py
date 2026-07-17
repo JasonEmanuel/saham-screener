@@ -16,6 +16,7 @@ Output (folder data/):
 """
 
 import json
+import math
 import statistics
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,31 @@ def scale(v, lo, hi):
 
 def inv(x):
     return None if x is None else 1.0 - x
+
+
+TEXT_KEYS = {"name", "sector", "industry"}
+
+
+def to_num(v):
+    """Paksa nilai jadi float. String angka dikonversi; 'Infinity'/teks lain -> None."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v) if math.isfinite(float(v)) else None
+    if isinstance(v, str):
+        try:
+            f = float(v)
+            return f if math.isfinite(f) else None
+        except ValueError:
+            return None
+    return None
+
+
+def sanitize(d):
+    """Bersihkan dict: semua nilai non-teks dipaksa numerik atau None."""
+    if not d:
+        return d
+    return {k: (v if k in TEXT_KEYS else to_num(v)) for k, v in d.items()}
 
 
 def weighted(parts):
@@ -188,9 +214,9 @@ def score_risk(f, t):
 
 # ---------------------------------------------------------------- rakit -----
 def build_row(s, med_all):
-    f = dict(s.get("fundamental") or {})
-    t = s.get("technical") or {}
-    flow = s.get("foreign_flow") or {}
+    f = sanitize(dict(s.get("fundamental") or {}))
+    t = sanitize(s.get("technical") or {})
+    flow = sanitize(s.get("foreign_flow") or {})
 
     # normalisasi dividend yield: versi yfinance baru pakai persen
     dy = f.get("dividend_yield")
