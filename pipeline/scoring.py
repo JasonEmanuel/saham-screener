@@ -223,7 +223,7 @@ def score_risk(f, t):
 
 
 # ---------------------------------------------------------------- rakit -----
-def build_row(s, med_all):
+def build_row(s, med_all, news_map=None):
     f = sanitize(dict(s.get("fundamental") or {}))
     t = sanitize(s.get("technical") or {})
     flow = sanitize(s.get("foreign_flow") or {})
