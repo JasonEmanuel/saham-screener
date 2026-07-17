@@ -70,7 +70,7 @@
   .d-head .sec{color:var(--muted);font-size:12.5px}
   .d-close{border:0;background:var(--chip);border-radius:8px;padding:6px 11px;
     cursor:pointer;font-size:14px}
-  .d-body{padding:16px 22px 22px}
+  .d-body{padding:16px 22px 22px;max-height:70vh;overflow-y:auto}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
     gap:10px 16px;margin-bottom:14px}
   .kv span{display:block;font-size:11.5px;color:var(--muted)}
@@ -79,7 +79,14 @@
   .srow{display:grid;grid-template-columns:110px 1fr 44px;gap:10px;
     align-items:center;font-size:12.5px;margin:5px 0}
   .srow .bar{width:100%}
-  .reasons{font-size:13px;color:var(--muted)}
+  h3.sect{font-size:12px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.06em;margin:16px 0 8px;border-top:1px solid var(--line);
+    padding-top:12px}
+  .irow{display:grid;grid-template-columns:130px 1fr auto;gap:10px;
+    align-items:center;font-size:13px;padding:4px 0}
+  .irow .lab{color:var(--muted);font-size:12.5px}
+  .pats{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .reasons{font-size:13px;color:var(--muted);margin-top:12px}
   .reasons li{margin-left:18px}
   @media (max-width:560px){ .tile{min-width:calc(50% - 10px)} }
 </style>
@@ -152,6 +159,8 @@ const badge = r => ({BUY:"b-buy",WATCHLIST:"b-watch",AVOID:"b-avoid"}[r]||"b-neu
 const esc = s => String(s??"").replace(/[&<>"]/g,
   c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
+const BULL_PATS = new Set(["Golden Cross","Breakout","Double Bottom","Bull Flag"]);
+
 async function load(name){
   if(S.data[name]!==undefined) return S.data[name];
   try{
@@ -184,6 +193,49 @@ function rowsTable(rows){
     <tbody>${tr}</tbody></table>`;
 }
 
+function maRow(label, harga, ma){
+  if(ma==null) return `<div class="irow"><span class="lab">${label}</span>
+    <b class="mono">—</b><span class="badge b-neutral">Data Tidak Cukup</span></div>`;
+  const above = harga!=null && harga>ma;
+  return `<div class="irow"><span class="lab">${label}</span>
+    <b class="mono">${rp(ma)}</b>
+    <span class="badge ${above?"b-buy":"b-avoid"}">${above?"Harga di atas":"Harga di bawah"}</span></div>`;
+}
+
+function techSection(r){
+  const macd = r.macd_hist==null ? null : r.macd_hist>0;
+  const k = r.stochrsi_k, d = r.stochrsi_d;
+  let zone = "—", zcls = "b-neutral";
+  if(k!=null){
+    if(k<20){ zone="Oversold"; zcls="b-watch"; }
+    else if(k>80){ zone="Overbought"; zcls="b-avoid"; }
+    else { zone="Netral"; zcls="b-neutral"; }
+  }
+  const vr = r.volume_ratio;
+  const pats = r.patterns||[];
+  return `<h3 class="sect">Analisa Teknikal</h3>
+    ${maRow("MA20", r.harga, r.sma20)}
+    ${maRow("MA50", r.harga, r.sma50)}
+    ${maRow("MA200", r.harga, r.sma200)}
+    <div class="irow"><span class="lab">MACD histogram</span>
+      <b class="mono">${num(r.macd_hist,2)}</b>
+      <span class="badge ${macd==null?"b-neutral":macd?"b-buy":"b-avoid"}">
+        ${macd==null?"—":macd?"Bullish":"Bearish"}</span></div>
+    <div class="irow"><span class="lab">Stoch RSI %K / %D</span>
+      <b class="mono">${num(k,0)} / ${num(d,0)}</b>
+      <span class="badge ${zcls}">${zone}</span></div>
+    <div class="irow"><span class="lab">Volume vs rata2 20h</span>
+      <b class="mono">${vr==null?"—":num(vr,2)+"×"}</b>
+      <span class="badge ${vr!=null&&vr>1.5?"b-buy":"b-neutral"}">
+        ${vr==null?"—":vr>1.5?"Volume tinggi":"Normal"}</span></div>
+    <div class="irow" style="align-items:start"><span class="lab">Chart pattern</span>
+      <div class="pats" style="grid-column:2/4">
+        ${pats.length ? pats.map(p=>`<span class="badge ${
+            BULL_PATS.has(p)?"b-buy":"b-avoid"}">${esc(p)}</span>`).join("")
+          : '<span class="badge b-neutral">Tidak ada pattern terdeteksi</span>'}
+      </div></div>`;
+}
+
 function detail(r){
   $("d-title").textContent = r.kode + " · " + (r.nama||"");
   $("d-sub").textContent = [r.sektor, "Market cap "+cap(r.market_cap),
@@ -207,6 +259,7 @@ function detail(r){
       <span class="mono">${num(v)}</span></div>`).join("")}</div>
      <div class="grid">${kv.map(([l,v])=>`
       <div class="kv"><span>${l}</span><b class="mono">${v}</b></div>`).join("")}</div>
+     ${techSection(r)}
      ${r.rating_reasons&&r.rating_reasons.length ?
       `<div class="reasons"><b>Catatan:</b><ul>${
         r.rating_reasons.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}`;
