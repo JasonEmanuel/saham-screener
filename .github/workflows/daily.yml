@@ -30,6 +30,9 @@ jobs:
           mkdir -p data
           python pipeline/fetch_idx.py --output data/dataset.json --delay 0.6 --tickers-file pipeline/tickers.txt
 
+      - name: Analisa berita
+        run: python pipeline/news.py || echo "analisa berita gagal, lanjut tanpa berita"
+
       - name: Scoring & ranking
         run: python pipeline/scoring.py
 
