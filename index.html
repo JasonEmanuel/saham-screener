@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IDX Screener Harian</title>
+<style>
+  :root{
+    --bg:#EEF1F5; --panel:#FFFFFF; --ink:#16243D; --muted:#5B6B84;
+    --line:#D8DEE7; --up:#0E9F6E; --down:#D64545; --warn:#B7791F;
+    --chip:#F1F4F8; --accent:#1D4ED8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);
+    font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:20px 16px 60px}
+  .wrap{max-width:1100px;margin:0 auto}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-variant-numeric:tabular-nums}
+
+  header h1{font-size:clamp(22px,4vw,32px);letter-spacing:-.02em}
+  header .sub{color:var(--muted);margin-top:4px;font-size:13px}
+  .board{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 6px}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:10px 16px;min-width:120px}
+  .tile b{display:block;font-size:22px}
+  .tile span{font-size:12px;color:var(--muted)}
+  .disclaimer{font-size:12px;color:var(--muted);border-left:3px solid var(--warn);
+    padding:6px 10px;margin:14px 0;background:var(--panel);border-radius:0 8px 8px 0}
+
+  nav{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 14px}
+  nav button{border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    padding:8px 14px;border-radius:999px;cursor:pointer;font-size:14px}
+  nav button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .toolbar{display:flex;gap:10px;align-items:center;margin:0 0 12px;flex-wrap:wrap}
+  select,input[type=search]{padding:8px 12px;border:1px solid var(--line);
+    border-radius:8px;background:var(--panel);font-size:14px;color:var(--ink)}
+  input[type=search]{min-width:220px}
+
+  .tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px}
+  table{border-collapse:collapse;width:100%;min-width:860px;font-size:13.5px}
+  th,td{padding:9px 12px;text-align:right;white-space:nowrap}
+  th{position:sticky;top:0;background:var(--panel);color:var(--muted);
+    font-weight:600;font-size:12px;border-bottom:1px solid var(--line);text-align:right}
+  th:nth-child(-n+3),td:nth-child(-n+3){text-align:left}
+  tbody tr{border-bottom:1px solid var(--line);cursor:pointer}
+  tbody tr:hover{background:var(--chip)}
+  tbody tr:last-child{border-bottom:0}
+  .pos{color:var(--up)} .neg{color:var(--down)}
+  .scorecell{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+  .bar{width:64px;height:5px;border-radius:3px;background:var(--chip);overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--up)}
+  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;
+    font-weight:600}
+  .b-buy{background:#E3F5EC;color:var(--up)}
+  .b-watch{background:#FBF3E0;color:var(--warn)}
+  .b-avoid{background:#FBE7E7;color:var(--down)}
+  .b-neutral{background:var(--chip);color:var(--muted)}
+  .empty{padding:30px;text-align:center;color:var(--muted)}
+
+  dialog{border:0;border-radius:14px;max-width:560px;width:92vw;padding:0;
+    box-shadow:0 20px 60px rgba(22,36,61,.25)}
+  dialog::backdrop{background:rgba(22,36,61,.45)}
+  .d-head{padding:18px 22px 12px;border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:start;gap:10px}
+  .d-head h2{font-size:20px}
+  .d-head .sec{color:var(--muted);font-size:12.5px}
+  .d-close{border:0;background:var(--chip);border-radius:8px;padding:6px 11px;
+    cursor:pointer;font-size:14px}
+  .d-body{padding:16px 22px 22px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+    gap:10px 16px;margin-bottom:14px}
+  .kv span{display:block;font-size:11.5px;color:var(--muted)}
+  .kv b{font-size:15px;font-weight:600}
+  .scores{margin:6px 0 14px}
+  .srow{display:grid;grid-template-columns:110px 1fr 44px;gap:10px;
+    align-items:center;font-size:12.5px;margin:5px 0}
+  .srow .bar{width:100%}
+  .reasons{font-size:13px;color:var(--muted)}
+  .reasons li{margin-left:18px}
+  @media (max-width:560px){ .tile{min-width:calc(50% - 10px)} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>IDX Screener Harian</h1>
+    <div class="sub" id="meta">Memuat data…</div>
+    <div class="board" id="board" hidden>
+      <div class="tile"><b id="c-scored">–</b><span>Emiten dinilai</span></div>
+      <div class="tile"><b id="c-buy">–</b><span>Kandidat BUY</span></div>
+      <div class="tile"><b id="c-watch">–</b><span>Watchlist</span></div>
+      <div class="tile"><b id="c-avoid">–</b><span>Avoid</span></div>
+    </div>
+    <p class="disclaimer">Hasil screening kuantitatif otomatis dari data publik
+      (Yahoo Finance, delayed). Bukan nasihat keuangan — lakukan riset mandiri
+      sebelum berinvestasi. Skor News &amp; Sentiment: Data Tidak Cukup.</p>
+  </header>
+
+  <nav id="tabs">
+    <button data-tab="top20" class="active">TOP BUY</button>
+    <button data-tab="watchlist">Watchlist</button>
+    <button data-tab="avoid">Avoid</button>
+    <button data-tab="categories">Kategori</button>
+    <button data-tab="all">Semua</button>
+  </nav>
+
+  <div class="toolbar" id="cat-toolbar" hidden>
+    <select id="cat-select">
+      <option value="top_growth">Top Growth</option>
+      <option value="top_value">Top Value</option>
+      <option value="top_dividend">Top Dividend</option>
+      <option value="top_momentum">Top Momentum</option>
+      <option value="top_foreign_buy">Top Foreign Buy</option>
+    </select>
+  </div>
+  <div class="toolbar" id="search-toolbar" hidden>
+    <input type="search" id="q" placeholder="Cari kode atau nama emiten…">
+    <span id="q-count" style="font-size:12.5px;color:var(--muted)"></span>
+  </div>
+
+  <div class="tablewrap"><div id="content" class="empty">Memuat…</div></div>
+</div>
+
+<dialog id="detail">
+  <div class="d-head">
+    <div><h2 id="d-title">–</h2><div class="sec" id="d-sub">–</div></div>
+    <button class="d-close" id="d-close">Tutup</button>
+  </div>
+  <div class="d-body" id="d-body"></div>
+</dialog>
+
+<script>
+const S = { data:{}, tab:"top20", cat:"top_growth", q:"" };
+const $ = id => document.getElementById(id);
+const bust = "?t=" + Date.now();
+
+const fmtN = new Intl.NumberFormat("id-ID");
+const num  = (v,d=1) => v==null ? "—" : Number(v).toLocaleString("id-ID",
+              {maximumFractionDigits:d});
+const rp   = v => v==null ? "—" : fmtN.format(Math.round(v));
+const pct  = v => v==null ? "—" : (v>0?"+":"") + Number(v).toFixed(1) + "%";
+const pct2 = v => v==null ? "—" : (v>0?"+":"") + (v*100).toFixed(1) + "%";
+const cap  = v => v==null ? "—" :
+  v>=1e12 ? (v/1e12).toFixed(2)+" T" :
+  v>=1e9  ? (v/1e9).toFixed(1)+" M"  : fmtN.format(v);
+const cls  = v => v==null ? "" : v>0 ? "pos" : v<0 ? "neg" : "";
+const badge = r => ({BUY:"b-buy",WATCHLIST:"b-watch",AVOID:"b-avoid"}[r]||"b-neutral");
+const esc = s => String(s??"").replace(/[&<>"]/g,
+  c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function load(name){
+  if(S.data[name]!==undefined) return S.data[name];
+  try{
+    const r = await fetch("data/"+name+".json"+bust);
+    S.data[name] = r.ok ? await r.json() : null;
+  }catch(e){ S.data[name] = null; }
+  return S.data[name];
+}
+
+function rowsTable(rows){
+  if(!rows || !rows.length)
+    return '<div class="empty">Tidak ada emiten di daftar ini hari ini.</div>';
+  const tr = rows.map((r,i)=>`
+    <tr data-k="${esc(r.kode)}">
+      <td class="mono">${r.rank??i+1}</td>
+      <td class="mono"><b>${esc(r.kode)}</b></td>
+      <td>${esc(r.nama??"—")}</td>
+      <td class="mono">${rp(r.harga)}</td>
+      <td class="mono">${rp(r.fair_value)}</td>
+      <td class="mono ${cls(r.upside_pct)}">${pct(r.upside_pct)}</td>
+      <td class="mono">${num(r.score_fundamental,0)}</td>
+      <td class="mono">${num(r.score_technical,0)}</td>
+      <td><div class="scorecell"><div class="bar"><i style="width:${(r.total_score??0)}%"></i></div>
+          <span class="mono"><b>${num(r.total_score)}</b></span></div></td>
+      <td><span class="badge ${badge(r.rating)}">${esc(r.rating)}</span></td>
+    </tr>`).join("");
+  return `<table>
+    <thead><tr><th>#</th><th>Kode</th><th>Nama</th><th>Harga</th><th>Fair Value</th>
+    <th>Upside</th><th>Fund</th><th>Tek</th><th>Total</th><th>Rating</th></tr></thead>
+    <tbody>${tr}</tbody></table>`;
+}
+
+function detail(r){
+  $("d-title").textContent = r.kode + " · " + (r.nama||"");
+  $("d-sub").textContent = [r.sektor, "Market cap "+cap(r.market_cap),
+    "Confidence: "+(r.confidence||"—")].filter(Boolean).join("  ·  ");
+  const sc = [["Fundamental",r.score_fundamental],["Teknikal",r.score_technical],
+    ["Valuasi",r.score_valuation],["Risiko",r.score_risk],["Total",r.total_score]];
+  const kv = [
+    ["Harga", rp(r.harga)], ["Fair value", rp(r.fair_value)],
+    ["Upside", pct(r.upside_pct)], ["Support", rp(r.support)],
+    ["Resistance", rp(r.resistance)], ["Take Profit 1", rp(r.take_profit_1)],
+    ["Take Profit 2", rp(r.take_profit_2)], ["Take Profit 3", rp(r.take_profit_3)],
+    ["Stop Loss", rp(r.stop_loss)], ["Risk/Reward", r.risk_reward??"—"],
+    ["RSI 14", num(r.rsi,0)], ["Perubahan 3 bln", pct2(r.change_3m)],
+    ["Dividend yield", pct2(r.dividend_yield)], ["Net asing (hari ini)", num(r.foreign_net,0)],
+    ["Nilai transaksi rata2", cap(r.daily_value_avg)],
+  ];
+  $("d-body").innerHTML =
+    `<div class="scores">${sc.map(([l,v])=>`
+      <div class="srow"><span>${l}</span>
+      <div class="bar"><i style="width:${v??0}%"></i></div>
+      <span class="mono">${num(v)}</span></div>`).join("")}</div>
+     <div class="grid">${kv.map(([l,v])=>`
+      <div class="kv"><span>${l}</span><b class="mono">${v}</b></div>`).join("")}</div>
+     ${r.rating_reasons&&r.rating_reasons.length ?
+      `<div class="reasons"><b>Catatan:</b><ul>${
+        r.rating_reasons.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}`;
+  $("detail").showModal();
+}
+
+let currentRows = [];
+async function render(){
+  $("cat-toolbar").hidden = S.tab!=="categories";
+  $("search-toolbar").hidden = S.tab!=="all";
+  const el = $("content");
+  el.className=""; el.innerHTML = '<div class="empty">Memuat…</div>';
+
+  let rows;
+  if(S.tab==="categories"){
+    const c = await load("categories"); rows = c ? c[S.cat] : null;
+  }else if(S.tab==="all"){
+    const all = await load("all_scores") || [];
+    const q = S.q.trim().toUpperCase();
+    rows = !q ? all.slice(0,100)
+      : all.filter(r => (r.kode||"").includes(q) ||
+          (r.nama||"").toUpperCase().includes(q)).slice(0,100);
+    $("q-count").textContent = q ? rows.length+" hasil (maks 100)" : "100 teratas";
+  }else{
+    rows = await load(S.tab);
+  }
+  currentRows = rows || [];
+  el.innerHTML = rowsTable(currentRows);
+}
+
+$("tabs").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  S.tab = b.dataset.tab;
+  document.querySelectorAll("#tabs button").forEach(x=>
+    x.classList.toggle("active", x===b));
+  render();
+});
+$("cat-select").addEventListener("change", e=>{S.cat=e.target.value;render();});
+$("q").addEventListener("input", e=>{S.q=e.target.value;render();});
+$("content").addEventListener("click", e=>{
+  const tr = e.target.closest("tr[data-k]"); if(!tr) return;
+  const r = currentRows.find(x=>x.kode===tr.dataset.k); if(r) detail(r);
+});
+$("d-close").addEventListener("click", ()=>$("detail").close());
+$("detail").addEventListener("click", e=>{
+  if(e.target===$("detail")) $("detail").close();
+});
+
+(async ()=>{
+  const m = await load("meta");
+  if(m){
+    const d = m.dataset_generated_at ?
+      new Date(m.dataset_generated_at).toLocaleString("id-ID",
+        {dateStyle:"full", timeStyle:"short"}) : "—";
+    $("meta").textContent = "Data per " + d + " (end-of-day, otomatis tiap hari bursa)";
+    $("c-scored").textContent = m.count_scored ?? "–";
+    $("c-buy").textContent = m.count_buy ?? "–";
+    $("board").hidden = false;
+  }else{
+    $("meta").textContent = "Data belum tersedia — jalankan workflow dulu.";
+  }
+  const w = await load("watchlist"); $("c-watch").textContent = w? w.length : "–";
+  const a = await load("avoid");     $("c-avoid").textContent = a? a.length : "–";
+  render();
+})();
+</script>
+</body>
+</html>
