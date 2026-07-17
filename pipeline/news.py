@@ -18,6 +18,11 @@ from pathlib import Path
 
 import feedparser
 
+try:
+    import cloudscraper
+except ImportError:
+    cloudscraper = None
+
 socket.setdefaulttimeout(20)
 
 DATA = Path("data")
@@ -30,12 +35,13 @@ MAX_AGE_DAYS = 30
 HALF_LIFE_DAYS = 7.0  # berita 7 hari lalu bobotnya separuh berita hari ini
 
 FEEDS = [
+    "https://news.google.com/rss/search?q=emiten+saham&hl=id&gl=ID&ceid=ID:id",
+    "https://news.google.com/rss/search?q=saham+IDX+laba&hl=id&gl=ID&ceid=ID:id",
     "https://www.cnbcindonesia.com/market/rss",
     "https://rss.detik.com/index.php/finance",
     "https://www.antaranews.com/rss/ekonomi.xml",
     "https://market.bisnis.com/rss",
-    "https://investasi.kontan.co.id/rss",
-    "https://www.kontan.co.id/rss",
+    "https://rss.kontan.co.id/news/investasi",
     "https://www.emitennews.com/feed",
     "https://pasardana.id/feed",
 ]
@@ -101,11 +107,28 @@ def entry_date(e):
     return datetime.now(timezone.utc)
 
 
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+
+
+def get_feed(url):
+    """Coba cloudscraper dulu (lolos blokir), fallback feedparser langsung."""
+    if cloudscraper is not None:
+        try:
+            resp = cloudscraper.create_scraper().get(
+                url, timeout=20, headers={"User-Agent": UA})
+            if resp.status_code == 200 and resp.text.strip():
+                return feedparser.parse(resp.text)
+        except Exception:
+            pass
+    return feedparser.parse(url, agent=UA)
+
+
 def fetch_articles(tickers):
     articles = []
     for url in FEEDS:
         try:
-            feed = feedparser.parse(url)
+            feed = get_feed(url)
             n = 0
             for e in feed.entries:
                 title = getattr(e, "title", "") or ""
