@@ -66,7 +66,10 @@ def sanitize(d):
     """Bersihkan dict: semua nilai non-teks dipaksa numerik atau None."""
     if not d:
         return d
-    return {k: (v if k in TEXT_KEYS else to_num(v)) for k, v in d.items()}
+    return {
+        k: (v if (k in TEXT_KEYS or isinstance(v, list)) else to_num(v))
+        for k, v in d.items()
+    }
 
 
 def weighted(parts):
@@ -161,6 +164,13 @@ def score_technical(t):
         (scale(t.get("change_3m"), -0.15, 0.30), 8),
         (scale(t.get("volume_ratio"), 0.5, 2.0), 6),
     ]
+
+    pats = t.get("patterns") or []
+    bull = sum(p in ("Golden Cross", "Breakout", "Double Bottom", "Bull Flag") for p in pats)
+    bear = sum(p in ("Death Cross", "Breakdown") for p in pats)
+    if pats:
+        parts.append((max(0.0, min(1.0, 0.5 + 0.25 * bull - 0.4 * bear)), 8))
+
     return weighted(parts)
 
 
@@ -318,6 +328,14 @@ def build_row(s, med_all):
         "stop_loss": sl,
         "risk_reward": rr,
         "rsi": t.get("rsi14"),
+        "sma20": t.get("sma20"),
+        "sma50": t.get("sma50"),
+        "sma200": t.get("sma200"),
+        "macd_hist": t.get("macd_hist"),
+        "stochrsi_k": t.get("stochrsi_k"),
+        "stochrsi_d": t.get("stochrsi_d"),
+        "volume_ratio": t.get("volume_ratio"),
+        "patterns": t.get("patterns") or [],
         "change_3m": t.get("change_3m"),
         "dividend_yield": f.get("dividend_yield"),
         "earnings_growth": f.get("earnings_growth"),
