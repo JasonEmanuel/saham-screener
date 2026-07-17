@@ -243,7 +243,12 @@ def build_row(s, med_all):
     vs = score_valuation(f, med, fv, price)
     rs = score_risk(f, t)
 
-    comps = {"fundamental": fs, "technical": ts, "valuation": vs, "risk": rs}
+    nw = (news_map or {}).get(s.get("kode")) or {}
+    ns = to_num(nw.get("news_score"))
+    ss = to_num(nw.get("sentiment_score"))
+
+    comps = {"fundamental": fs, "technical": ts, "news": ns,
+             "sentiment": ss, "valuation": vs, "risk": rs}
     wsum = sum(WEIGHTS[k] for k, v in comps.items() if v is not None)
     total = (
         round(sum(v * WEIGHTS[k] for k, v in comps.items() if v is not None) / wsum, 1)
@@ -281,7 +286,7 @@ def build_row(s, med_all):
     reasons = []
     if total is None or fs is None or ts is None:
         rating = "Data Tidak Cukup"
-    elif total >= BUY_TOTAL and fs >= BUY_FUND and ts >= BUY_TECH and liquid:
+    elif (total >= BUY_TOTAL and fs >= BUY_FUND and ts >= BUY_TECH and liquid and (ns is None or ns >= BUY_NEWS)):
         rating = "BUY"
     elif fs < 40 and ts < 40:
         rating = "AVOID"
@@ -296,6 +301,8 @@ def build_row(s, med_all):
             reasons.append(f"Total {total} < {BUY_TOTAL}")
         if not liquid:
             reasons.append("Likuiditas di bawah ambang 1 M IDR/hari")
+        if ns is not None and ns < BUY_NEWS:
+            reasons.append(f"News {ns} < {BUY_NEWS}")
     else:
         rating = "NEUTRAL"
 
@@ -309,8 +316,10 @@ def build_row(s, med_all):
         "upside_pct": upside,
         "score_fundamental": fs,
         "score_technical": ts,
-        "score_news": None,        # Data Tidak Cukup
-        "score_sentiment": None,   # Data Tidak Cukup
+        "score_news": ns,
+        "score_sentiment": ss,
+        "news_count": nw.get("article_count"),
+        "headlines": nw.get("headlines") or [],
         "score_valuation": vs,
         "score_risk": rs,
         "total_score": total,
@@ -355,8 +364,17 @@ def main():
     stocks = [s for s in ds["stocks"].values() if s.get("status") == "OK"]
     skipped = len(ds["stocks"]) - len(stocks)
 
+    news_path = DATA / "news.json"
+    news_map = {}
+    if news_path.exists():
+        try:
+            news_map = json.loads(news_path.read_text()).get("per_ticker", {})
+        except Exception:
+            news_map = {}
+    print(f"[i] Data berita tersedia untuk {len(news_map)} emiten")
+
     med_all = sector_medians(stocks)
-    rows = [build_row(s, med_all) for s in stocks]
+    rows = [build_row(s, med_all, news_map) for s in stocks]
     rows = [r for r in rows if r["total_score"] is not None]
     rows.sort(key=lambda r: r["total_score"], reverse=True)
     for i, r in enumerate(rows, 1):
@@ -385,8 +403,8 @@ def main():
         "count_skipped": skipped,
         "count_buy": len(buys),
         "weights_note": (
-            "News & Sentiment: Data Tidak Cukup (tanpa sumber gratis). "
-            "Bobot dinormalisasi: Fundamental/Technical/Valuation/Risk = 40/30/5/5."
+            "Bobot: Fundamental 40 / Technical 30 / News 10 / Sentiment 10 / "
+            "Valuation 5 / Risk 5. Emiten tanpa berita: bobot dinormalisasi otomatis."
         ),
         "disclaimer": (
             "Hasil screening kuantitatif otomatis dari data publik, bukan "
