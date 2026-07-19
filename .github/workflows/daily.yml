@@ -36,6 +36,9 @@ jobs:
       - name: Scoring & ranking
         run: python pipeline/scoring.py
 
+      - name: Evaluasi sinyal
+        run: python pipeline/evaluate.py || echo "evaluasi gagal, lanjut"
+
       - name: Commit hasil
         run: |
           git config user.name "idx-bot"
