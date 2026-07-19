@@ -23,10 +23,10 @@ from pathlib import Path
 
 DATA = Path("data")
 
-WEIGHTS = {"fundamental": 40, "technical": 30, "valuation": 5, "risk": 5}
+WEIGHTS = {"fundamental": 40, "technical": 30, "news": 10, "sentiment": 10, "valuation": 5, "risk": 5}
 MIN_DAILY_VALUE = 1_000_000_000  # likuiditas minimum: rata-rata 1 M IDR/hari
 
-BUY_TOTAL, BUY_FUND, BUY_TECH = 80, 75, 75
+BUY_TOTAL, BUY_FUND, BUY_TECH, BUY_NEWS = 80, 75, 75, 60
 WATCH_TOTAL = 70
 
 
