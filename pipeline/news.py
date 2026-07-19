@@ -34,16 +34,17 @@ TICKERS_FILE = Path("pipeline/tickers.txt")
 MAX_AGE_DAYS = 30
 HALF_LIFE_DAYS = 7.0  # berita 7 hari lalu bobotnya separuh berita hari ini
 
+GN = "https://news.google.com/rss/search?q={}&hl=id&gl=ID&ceid=ID:id"
 FEEDS = [
-    "https://news.google.com/rss/search?q=emiten+saham&hl=id&gl=ID&ceid=ID:id",
-    "https://news.google.com/rss/search?q=saham+IDX+laba&hl=id&gl=ID&ceid=ID:id",
-    "https://www.cnbcindonesia.com/market/rss",
-    "https://rss.detik.com/index.php/finance",
+    GN.format("emiten+saham"),
+    GN.format("saham+IDX+laba"),
+    GN.format("saham+dividen"),
+    GN.format("emiten+kontrak+OR+akuisisi+OR+ekspansi"),
+    GN.format("saham+suspensi+OR+gugatan+OR+rugi"),
+    GN.format("emiten+right+issue+OR+buyback"),
+    GN.format("rekomendasi+saham+hari+ini"),
+    GN.format("saham+bank+OR+tambang+OR+energi"),
     "https://www.antaranews.com/rss/ekonomi.xml",
-    "https://market.bisnis.com/rss",
-    "https://rss.kontan.co.id/news/investasi",
-    "https://www.emitennews.com/feed",
-    "https://pasardana.id/feed",
 ]
 
 # --- keyword event (skor News): aksi korporasi & kinerja ---
