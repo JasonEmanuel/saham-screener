@@ -41,11 +41,11 @@
 
   .tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);
     border-radius:12px}
-  table{border-collapse:collapse;width:100%;min-width:860px;font-size:13.5px}
+  table{border-collapse:collapse;width:100%;min-width:940px;font-size:13.5px}
   th,td{padding:9px 12px;text-align:right;white-space:nowrap}
   th{position:sticky;top:0;background:var(--panel);color:var(--muted);
     font-weight:600;font-size:12px;border-bottom:1px solid var(--line);text-align:right}
-  th:nth-child(-n+3),td:nth-child(-n+3){text-align:left}
+  th:nth-child(-n+4),td:nth-child(-n+4){text-align:left}
   tbody tr{border-bottom:1px solid var(--line);cursor:pointer}
   tbody tr:hover{background:var(--chip)}
   tbody tr:last-child{border-bottom:0}
@@ -60,6 +60,9 @@
   .b-avoid{background:#FBE7E7;color:var(--down)}
   .b-neutral{background:var(--chip);color:var(--muted)}
   .empty{padding:30px;text-align:center;color:var(--muted)}
+  .evalhead{padding:16px 16px 4px}
+  .evalhead .board{margin:0 0 8px}
+  .evalnote{font-size:12px;color:var(--muted);padding:0 16px 12px}
 
   dialog{border:0;border-radius:14px;max-width:560px;width:92vw;padding:0;
     box-shadow:0 20px 60px rgba(22,36,61,.25)}
@@ -86,6 +89,9 @@
     align-items:center;font-size:13px;padding:4px 0}
   .irow .lab{color:var(--muted);font-size:12.5px}
   .pats{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+  .hl{font-size:13px;padding:5px 0;display:flex;gap:8px;align-items:baseline}
+  .hl .dt{color:var(--muted);font-size:11.5px;white-space:nowrap}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none;position:relative;top:1px}
   .reasons{font-size:13px;color:var(--muted);margin-top:12px}
   .reasons li{margin-left:18px}
   @media (max-width:560px){ .tile{min-width:calc(50% - 10px)} }
@@ -103,8 +109,8 @@
       <div class="tile"><b id="c-avoid">–</b><span>Avoid</span></div>
     </div>
     <p class="disclaimer">Hasil screening kuantitatif otomatis dari data publik
-      (Yahoo Finance, delayed). Bukan nasihat keuangan — lakukan riset mandiri
-      sebelum berinvestasi. Skor News &amp; Sentiment: Data Tidak Cukup.</p>
+      (Yahoo Finance delayed + Google News). Bukan nasihat keuangan — lakukan
+      riset mandiri sebelum berinvestasi.</p>
   </header>
 
   <nav id="tabs">
@@ -113,6 +119,7 @@
     <button data-tab="avoid">Avoid</button>
     <button data-tab="categories">Kategori</button>
     <button data-tab="all">Semua</button>
+    <button data-tab="eval">Evaluasi</button>
   </nav>
 
   <div class="toolbar" id="cat-toolbar" hidden>
@@ -141,7 +148,7 @@
 </dialog>
 
 <script>
-const S = { data:{}, tab:"top20", cat:"top_growth", q:"" };
+const S = { data:{}, tab:"top20", cat:"top_growth", q:"", prev:undefined };
 const $ = id => document.getElementById(id);
 const bust = "?t=" + Date.now();
 
@@ -170,12 +177,36 @@ async function load(name){
   return S.data[name];
 }
 
-function rowsTable(rows){
+async function loadPrevRanks(){
+  if(S.prev!==undefined) return S.prev;
+  S.prev = null;
+  const idx = await load("history/index");
+  if(Array.isArray(idx) && idx.length>=2){
+    const arr = await load("history/"+idx[idx.length-2]);
+    if(Array.isArray(arr)){
+      S.prev = {};
+      arr.forEach(x=>{ if(x.kode!=null) S.prev[x.kode]=x.rank; });
+    }
+  }
+  return S.prev;
+}
+
+function deltaCell(r, prev){
+  if(!prev) return '<td class="mono" style="color:var(--muted)">—</td>';
+  const p = prev[r.kode];
+  if(p==null) return '<td class="mono" style="color:var(--accent)">baru</td>';
+  const d = p - r.rank;
+  if(!d) return '<td class="mono" style="color:var(--muted)">•</td>';
+  return `<td class="mono ${d>0?"pos":"neg"}">${d>0?"▲":"▼"}${Math.abs(d)}</td>`;
+}
+
+function rowsTable(rows, prev){
   if(!rows || !rows.length)
     return '<div class="empty">Tidak ada emiten di daftar ini hari ini.</div>';
   const tr = rows.map((r,i)=>`
     <tr data-k="${esc(r.kode)}">
       <td class="mono">${r.rank??i+1}</td>
+      ${deltaCell(r, prev)}
       <td class="mono"><b>${esc(r.kode)}</b></td>
       <td>${esc(r.nama??"—")}</td>
       <td class="mono">${rp(r.harga)}</td>
@@ -183,13 +214,15 @@ function rowsTable(rows){
       <td class="mono ${cls(r.upside_pct)}">${pct(r.upside_pct)}</td>
       <td class="mono">${num(r.score_fundamental,0)}</td>
       <td class="mono">${num(r.score_technical,0)}</td>
+      <td class="mono">${num(r.score_news,0)}</td>
       <td><div class="scorecell"><div class="bar"><i style="width:${(r.total_score??0)}%"></i></div>
           <span class="mono"><b>${num(r.total_score)}</b></span></div></td>
       <td><span class="badge ${badge(r.rating)}">${esc(r.rating)}</span></td>
     </tr>`).join("");
   return `<table>
-    <thead><tr><th>#</th><th>Kode</th><th>Nama</th><th>Harga</th><th>Fair Value</th>
-    <th>Upside</th><th>Fund</th><th>Tek</th><th>Total</th><th>Rating</th></tr></thead>
+    <thead><tr><th>#</th><th>Δ</th><th>Kode</th><th>Nama</th><th>Harga</th>
+    <th>Fair Value</th><th>Upside</th><th>Fund</th><th>Tek</th><th>News</th>
+    <th>Total</th><th>Rating</th></tr></thead>
     <tbody>${tr}</tbody></table>`;
 }
 
@@ -236,11 +269,23 @@ function techSection(r){
       </div></div>`;
 }
 
+function newsSection(r){
+  const hs = r.headlines||[];
+  const dot = s => s>0 ? "var(--up)" : s<0 ? "var(--down)" : "var(--muted)";
+  return `<h3 class="sect">Berita 30 Hari
+      ${r.news_count?` · ${r.news_count} artikel`:""}</h3>
+    ${hs.length ? hs.map(h=>`
+      <div class="hl"><span class="dot" style="background:${dot(h.s)}"></span>
+        <span class="dt mono">${esc(h.d)}</span><span>${esc(h.t)}</span></div>`).join("")
+      : '<div class="reasons">Tidak ada berita ter-index untuk emiten ini — skor News/Sentiment "Data Tidak Cukup", bobot dinormalisasi.</div>'}`;
+}
+
 function detail(r){
   $("d-title").textContent = r.kode + " · " + (r.nama||"");
   $("d-sub").textContent = [r.sektor, "Market cap "+cap(r.market_cap),
     "Confidence: "+(r.confidence||"—")].filter(Boolean).join("  ·  ");
   const sc = [["Fundamental",r.score_fundamental],["Teknikal",r.score_technical],
+    ["News",r.score_news],["Sentimen",r.score_sentiment],
     ["Valuasi",r.score_valuation],["Risiko",r.score_risk],["Total",r.total_score]];
   const kv = [
     ["Harga", rp(r.harga)], ["Fair value", rp(r.fair_value)],
@@ -260,10 +305,51 @@ function detail(r){
      <div class="grid">${kv.map(([l,v])=>`
       <div class="kv"><span>${l}</span><b class="mono">${v}</b></div>`).join("")}</div>
      ${techSection(r)}
+     ${newsSection(r)}
      ${r.rating_reasons&&r.rating_reasons.length ?
       `<div class="reasons"><b>Catatan:</b><ul>${
         r.rating_reasons.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}`;
   $("detail").showModal();
+}
+
+function hCell(h, field){
+  if(!h) return '<td class="mono" style="color:var(--muted)">menunggu</td>';
+  const v = h[field];
+  return `<td class="mono ${cls(v)}">${v==null?"—":pct(v)}</td>`;
+}
+
+function evalView(ev){
+  if(!ev || !ev.total_signals)
+    return '<div class="empty">Belum ada sinyal BUY tercatat. Evaluasi mulai terisi setelah sinyal berumur ≥5 hari bursa.</div>';
+  const s5 = ev.summary?.h5||{}, s20 = ev.summary?.h20||{};
+  const pat = ev.patterns||{};
+  const prof = p => p ? `n=${p.n} · Total ${num(p.total)} · Fund ${num(p.fund)} · Tek ${num(p.tech)}` : "belum ada";
+  const head = `<div class="evalhead"><div class="board">
+      <div class="tile"><b>${ev.total_signals}</b><span>Total sinyal BUY</span></div>
+      <div class="tile"><b>${s5.n?s5.win_rate+"%":"—"}</b><span>Win-rate 5 hari (n=${s5.n||0})</span></div>
+      <div class="tile"><b class="${cls(s5.avg_return)}">${s5.n?pct(s5.avg_return):"—"}</b><span>Rata2 return 5H</span></div>
+      <div class="tile"><b class="${cls(s5.avg_alpha)}">${s5.avg_alpha!=null?pct(s5.avg_alpha):"—"}</b><span>Alpha vs IHSG 5H</span></div>
+      <div class="tile"><b>${s20.n?s20.win_rate+"%":"—"}</b><span>Win-rate 20 hari (n=${s20.n||0})</span></div>
+      <div class="tile"><b>${ev.pending}</b><span>Menunggu matang</span></div>
+    </div></div>
+    <div class="evalnote">Win = return absolut &gt; 0 setelah horizon. Alpha = selisih vs IHSG periode sama.
+      Profil sinyal menang (5H): ${prof(pat.winners)}. Profil sinyal kalah: ${prof(pat.losers)}.</div>`;
+  const rows = (ev.signals||[]).map(s=>`
+    <tr>
+      <td class="mono"><b>${esc(s.kode)}</b></td>
+      <td class="mono">${esc(s.signal_date)}</td>
+      <td class="mono">${rp(s.harga_signal)}</td>
+      <td class="mono">${num(s.total)}</td>
+      ${hCell(s.h5,"return_pct")}
+      ${hCell(s.h5,"alpha_pct")}
+      ${hCell(s.h20,"return_pct")}
+      <td>${s.h5 ? `<span class="badge ${s.h5.win?"b-buy":"b-avoid"}">${s.h5.win?"WIN":"LOSS"}</span>`
+                 : '<span class="badge b-neutral">PENDING</span>'}</td>
+    </tr>`).join("");
+  return head + `<table>
+    <thead><tr><th>Kode</th><th>Tgl Sinyal</th><th>Harga Sinyal</th><th>Skor</th>
+    <th>Return 5H</th><th>Alpha 5H</th><th>Return 20H</th><th>Status 5H</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
 }
 
 let currentRows = [];
@@ -272,6 +358,12 @@ async function render(){
   $("search-toolbar").hidden = S.tab!=="all";
   const el = $("content");
   el.className=""; el.innerHTML = '<div class="empty">Memuat…</div>';
+
+  if(S.tab==="eval"){
+    currentRows = [];
+    el.innerHTML = evalView(await load("evaluation"));
+    return;
+  }
 
   let rows;
   if(S.tab==="categories"){
@@ -287,7 +379,7 @@ async function render(){
     rows = await load(S.tab);
   }
   currentRows = rows || [];
-  el.innerHTML = rowsTable(currentRows);
+  el.innerHTML = rowsTable(currentRows, await loadPrevRanks());
 }
 
 $("tabs").addEventListener("click", e=>{
