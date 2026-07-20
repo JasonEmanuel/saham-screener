@@ -125,7 +125,7 @@ def score_fundamental(f, med):
     return weighted(parts)
 
 
-def score_technical(t):
+def score_technical(t, tailwind=None):
     if not t:
         return None
     p = t.get("price")
@@ -173,6 +173,9 @@ def score_technical(t):
     bear = sum(p in ("Death Cross", "Breakdown") for p in pats)
     if pats:
         parts.append((max(0.0, min(1.0, 0.5 + 0.25 * bull - 0.4 * bear)), 8))
+
+    if tailwind is not None:
+        parts.append((scale(tailwind, -0.15, 0.15), 5))
 
     return weighted(parts)
 
@@ -226,7 +229,7 @@ def score_risk(f, t):
 
 
 # ---------------------------------------------------------------- rakit -----
-def build_row(s, med_all, news_map=None):
+def build_row(s, med_all, news_map=None, market=None, ksei_map=None):
     f = sanitize(dict(s.get("fundamental") or {}))
     t = sanitize(s.get("technical") or {})
     flow = sanitize(s.get("foreign_flow") or {})
@@ -241,7 +244,8 @@ def build_row(s, med_all, news_map=None):
     price = t.get("price")
 
     fs = score_fundamental(f, med)
-    ts = score_technical(t)
+    tail = ((market or {}).get("sector_tailwind") or {}).get(sec)
+    ts = score_technical(t, to_num(tail))
     fv = fair_value(f, med, price)
     vs = score_valuation(f, med, fv, price)
     rs = score_risk(f, t)
@@ -249,6 +253,18 @@ def build_row(s, med_all, news_map=None):
     nw = (news_map or {}).get(s.get("kode")) or {}
     ns = to_num(nw.get("news_score"))
     ss = to_num(nw.get("sentiment_score"))
+
+    # arus dana KSEI (bulanan) -> blend ke Sentiment
+    kk = (ksei_map or {}).get(s.get("kode")) or {}
+    ksei_flow = weighted([
+        (scale(to_num(kk.get("foreign_delta_pp")), -1.0, 1.0), 60),
+        (scale(to_num(kk.get("inst_delta_pp")), -1.0, 1.0), 40),
+    ])
+    if ksei_flow is not None:
+        ss = round((ss + ksei_flow) / 2, 1) if ss is not None else ksei_flow
+
+    regime = to_num((market or {}).get("regime_score"))
+    regime_bear = regime is not None and regime < 30
 
     comps = {"fundamental": fs, "technical": ts, "news": ns,
              "sentiment": ss, "valuation": vs, "risk": rs}
@@ -325,7 +341,7 @@ def build_row(s, med_all, news_map=None):
     reasons = []
     if total is None or fs is None or ts is None:
         rating = "Data Tidak Cukup"
-    elif (total >= BUY_TOTAL and fs >= BUY_FUND and ts >= BUY_TECH and liquid and not flags and (ns is None or ns >= BUY_NEWS)):
+    elif (total >= BUY_TOTAL and fs >= BUY_FUND and ts >= BUY_TECH and liquid and not flags and not regime_bear and (ns is None or ns >= BUY_NEWS)):
         rating = "BUY"
     elif fs < 40 and ts < 40:
         rating = "AVOID"
@@ -343,6 +359,8 @@ def build_row(s, med_all, news_map=None):
         if ns is not None and ns < BUY_NEWS:
             reasons.append(f"News {ns} < {BUY_NEWS}")
         reasons.extend(flags)
+        if regime_bear:
+            reasons.append("Market regime bearish — sinyal BUY ditahan")
     else:
         rating = "NEUTRAL"
 
@@ -370,6 +388,8 @@ def build_row(s, med_all, news_map=None):
         "liquid": liquid,
         "daily_value_avg": round(daily_value) if daily_value else None,
         "foreign_net": flow.get("foreign_net"),
+        "foreign_own_pct": kk.get("foreign_pct"),
+        "foreign_own_delta_pp": kk.get("foreign_delta_pp"),
         "support": t.get("support_20d"),
         "resistance": t.get("resistance_20d"),
         "take_profit_1": tp1,
@@ -417,8 +437,25 @@ def main():
             news_map = {}
     print(f"[i] Data berita tersedia untuk {len(news_map)} emiten")
 
+    market = {}
+    mp = DATA / "market.json"
+    if mp.exists():
+        try:
+            market = json.loads(mp.read_text())
+        except Exception:
+            market = {}
+    ksei_map = {}
+    kp = DATA / "ksei.json"
+    if kp.exists():
+        try:
+            ksei_map = json.loads(kp.read_text()).get("per_ticker", {})
+        except Exception:
+            ksei_map = {}
+    print(f"[i] Market regime: {market.get('regime_score', '—')} "
+          f"({market.get('regime_label', '—')}) | KSEI: {len(ksei_map)} emiten")
+
     med_all = sector_medians(stocks)
-    rows = [build_row(s, med_all, news_map) for s in stocks]
+    rows = [build_row(s, med_all, news_map, market, ksei_map) for s in stocks]
     rows = [r for r in rows if r["total_score"] is not None]
     rows.sort(key=lambda r: r["total_score"], reverse=True)
     for i, r in enumerate(rows, 1):
