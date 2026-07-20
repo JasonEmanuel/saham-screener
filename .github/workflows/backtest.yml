@@ -1,0 +1,33 @@
+name: Backtest Teknikal
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r pipeline/requirements.txt
+
+      - name: Jalankan backtest
+        run: python pipeline/backtest.py
+
+      - name: Commit hasil
+        run: |
+          git config user.name "idx-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git pull
+          git add data/backtest.json
+          git commit -m "data: backtest teknikal" || echo "no changes"
+          git push
