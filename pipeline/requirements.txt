@@ -3,3 +3,4 @@ pandas
 numpy
 cloudscraper
 feedparser
+transformers
