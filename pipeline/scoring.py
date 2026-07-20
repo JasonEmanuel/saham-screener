@@ -293,6 +293,22 @@ def build_row(s, med_all, news_map=None):
     tp3 = fv if (fv and price and fv > price) else None
     upside = round(100 * (fv - price) / price, 1) if (fv and price) else None
 
+    # buy area: zona akumulasi dari support/1xATR di bawah harga s.d. harga sekarang
+    buy_low = buy_high = avg_buy = None
+    if price:
+        sup20 = t.get("support_20d")
+        cands = []
+        if atr:
+            cands.append(price - atr)
+        if sup20 and sup20 < price:
+            cands.append(sup20)
+        if cands:
+            buy_low = round(max(cands), 2)
+            buy_high = round(price, 2)
+            if buy_low >= buy_high:
+                buy_low = round(buy_high * 0.97, 2)
+            avg_buy = round((buy_low + buy_high) / 2, 2)
+
     rr = None
     if price and sl and tp1 and price > sl:
         rr = round((tp1 - price) / (price - sl), 2)
@@ -360,6 +376,9 @@ def build_row(s, med_all, news_map=None):
         "take_profit_2": tp2,
         "take_profit_3": tp3,
         "stop_loss": sl,
+        "buy_area_low": buy_low,
+        "buy_area_high": buy_high,
+        "average_buy": avg_buy,
         "risk_reward": rr,
         "rsi": t.get("rsi14"),
         "sma20": t.get("sma20"),
