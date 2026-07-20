@@ -1,0 +1,53 @@
+{
+ "generated_at": "2026-07-20T01:51:59.178693+00:00",
+ "universe": 250,
+ "period": "2y",
+ "baseline_beli_acak": {
+  "avg_5d_pct": 1.08,
+  "avg_20d_pct": 4.73
+ },
+ "signals": {
+  "Breakout 60D + volume": {
+   "h5": {
+    "n": 934,
+    "win_rate": 51.4,
+    "avg_return_pct": 5.95,
+    "median_return_pct": 0.61
+   },
+   "h20": {
+    "n": 934,
+    "win_rate": 51.3,
+    "avg_return_pct": 13.6,
+    "median_return_pct": 1.14
+   }
+  },
+  "MACD Cross (uptrend)": {
+   "h5": {
+    "n": 1499,
+    "win_rate": 46.9,
+    "avg_return_pct": 2.64,
+    "median_return_pct": 0.0
+   },
+   "h20": {
+    "n": 1499,
+    "win_rate": 47.0,
+    "avg_return_pct": 7.18,
+    "median_return_pct": -0.53
+   }
+  },
+  "Golden Cross": {
+   "h5": {
+    "n": 201,
+    "win_rate": 52.7,
+    "avg_return_pct": 2.45,
+    "median_return_pct": 0.74
+   },
+   "h20": {
+    "n": 201,
+    "win_rate": 51.2,
+    "avg_return_pct": 7.5,
+    "median_return_pct": 1.16
+   }
+  }
+ }
+}
