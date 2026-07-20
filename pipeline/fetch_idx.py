@@ -142,7 +142,7 @@ def foreign_flow_from(row):
 # Sumber 2: Yahoo Finance — fundamental + historis
 # ----------------------------------------------------------------------------
 def fetch_yahoo(code):
-    """Return (info_dict|None, history_df|None)."""
+    """Return (info_dict|None, history_df|None, quarterly_dict)."""
     t = yf.Ticker(f"{code}.JK")
     info, hist = None, None
     try:
@@ -157,13 +157,47 @@ def fetch_yahoo(code):
             hist = None
     except Exception:
         hist = None
-    return info, hist
+    return info, hist, quarterly_metrics(t) if info else {}
 
 
 def extract_fundamentals(info):
     if not info:
         return None
     return {ours: clean(info.get(theirs)) for ours, theirs in FUND_FIELDS.items()}
+
+
+def quarterly_metrics(t):
+    """Tren laporan keuangan kuartalan (yfinance). Best-effort, boleh kosong."""
+    out = {}
+    try:
+        q = t.quarterly_income_stmt
+        if q is None or q.empty:
+            return out
+
+        def row(*names):
+            for nm in names:
+                if nm in q.index:
+                    return [v for v in q.loc[nm].tolist() if v == v][:6]
+            return []
+
+        rev = row("Total Revenue", "Operating Revenue")
+        ni = row("Net Income", "Net Income Common Stockholders")
+
+        def g(vals, lag):
+            if len(vals) > lag and vals[lag]:
+                return clean((vals[0] - vals[lag]) / abs(vals[lag]))
+            return None
+
+        out["rev_qoq"] = g(rev, 1)        # kuartal terbaru vs kuartal sebelumnya
+        out["rev_yoy_q"] = g(rev, 4)      # vs kuartal sama tahun lalu
+        out["ni_qoq"] = g(ni, 1)
+        out["ni_yoy_q"] = g(ni, 4)
+        if ni:
+            out["ni_positive_ratio"] = clean(sum(v > 0 for v in ni) / len(ni))
+        out["quarters_available"] = len(rev)
+    except Exception:
+        pass
+    return out
 
 
 # ----------------------------------------------------------------------------
@@ -377,6 +411,7 @@ def compute_technicals(df):
         "max_drawdown_1y": clean(drawdown),
         "volume_avg20": vol_avg20,
         "volume_ratio": clean(last(volume) / vol_avg20) if vol_avg20 else None,
+        "last_bar_date": str(df.index[-1].date()),
         "bars": n,
     }
 
@@ -387,8 +422,10 @@ def compute_technicals(df):
 def fetch_one(code, idx_row, delay):
     for attempt in range(RETRIES + 1):
         try:
-            info, hist = fetch_yahoo(code)
+            info, hist, qm = fetch_yahoo(code)
             fund = extract_fundamentals(info)
+            if fund is not None and qm:
+                fund.update(qm)
             tech = compute_technicals(hist)
             flow = foreign_flow_from(idx_row)
             complete = all([fund, tech])
