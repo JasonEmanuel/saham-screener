@@ -18,7 +18,7 @@ Output (folder data/):
 import json
 import math
 import statistics
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 DATA = Path("data")
@@ -44,7 +44,7 @@ def inv(x):
     return None if x is None else 1.0 - x
 
 
-TEXT_KEYS = {"name", "sector", "industry"}
+TEXT_KEYS = {"name", "sector", "industry", "last_bar_date"}
 
 
 def to_num(v):
@@ -113,6 +113,9 @@ def score_fundamental(f, med):
         (scale(f.get("current_ratio"), 0.8, 2.5), 6),
         (1.0 if (f.get("free_cash_flow") or 0) > 0 else 0.0, 8),
         (scale(f.get("dividend_yield"), 0.0, 0.06), 4),
+        (scale(f.get("rev_yoy_q"), -0.10, 0.30), 8),
+        (scale(f.get("ni_yoy_q"), -0.15, 0.40), 8),
+        (scale(f.get("ni_positive_ratio"), 0.5, 1.0), 6),
     ]
     if med:  # relatif terhadap median sektor
         if roe is not None and med.get("roe"):
@@ -261,6 +264,26 @@ def build_row(s, med_all, news_map=None):
     daily_value = price * vol20 if (price and vol20) else None
     liquid = bool(daily_value and daily_value >= MIN_DAILY_VALUE)
 
+    # filter kualitas (#5): tandai saham berisiko gorengan / tidak sehat
+    flags = []
+    vol_ann = t.get("volatility_annual")
+    mcap = f.get("market_cap")
+    if price is not None and price < 100:
+        flags.append("Harga di bawah Rp100 (rentan ARA/ARB beruntun)")
+    if vol_ann is not None and vol_ann > 1.0:
+        flags.append("Volatilitas ekstrem (>100%/tahun)")
+    if (mcap is not None and mcap < 5e11
+            and vol_ann is not None and vol_ann > 0.7):
+        flags.append("Kapitalisasi mikro + volatil")
+    lbd = t.get("last_bar_date")
+    if isinstance(lbd, str):
+        try:
+            gap = (date.today() - date.fromisoformat(lbd)).days
+            if gap > 7:
+                flags.append(f"Tidak diperdagangkan {gap} hari (indikasi suspensi)")
+        except ValueError:
+            pass
+
     # trade plan
     atr = t.get("atr14")
     sl = t.get("support_20d")
@@ -286,7 +309,7 @@ def build_row(s, med_all, news_map=None):
     reasons = []
     if total is None or fs is None or ts is None:
         rating = "Data Tidak Cukup"
-    elif (total >= BUY_TOTAL and fs >= BUY_FUND and ts >= BUY_TECH and liquid and (ns is None or ns >= BUY_NEWS)):
+    elif (total >= BUY_TOTAL and fs >= BUY_FUND and ts >= BUY_TECH and liquid and not flags and (ns is None or ns >= BUY_NEWS)):
         rating = "BUY"
     elif fs < 40 and ts < 40:
         rating = "AVOID"
@@ -303,6 +326,7 @@ def build_row(s, med_all, news_map=None):
             reasons.append("Likuiditas di bawah ambang 1 M IDR/hari")
         if ns is not None and ns < BUY_NEWS:
             reasons.append(f"News {ns} < {BUY_NEWS}")
+        reasons.extend(flags)
     else:
         rating = "NEUTRAL"
 
@@ -325,6 +349,7 @@ def build_row(s, med_all, news_map=None):
         "total_score": total,
         "rating": rating,
         "rating_reasons": reasons,
+        "quality_flags": flags,
         "confidence": confidence,
         "liquid": liquid,
         "daily_value_avg": round(daily_value) if daily_value else None,
