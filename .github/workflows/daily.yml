@@ -25,6 +25,12 @@ jobs:
       - name: Update daftar emiten
         run: python pipeline/update_tickers.py || echo "screener gagal, pakai tickers.txt lama"
 
+      - name: Data pasar & komoditas
+        run: python pipeline/market.py || echo "market gagal, lanjut"
+
+      - name: Data KSEI
+        run: python pipeline/ksei.py || echo "ksei gagal, lanjut"
+
       - name: Fetch dataset
         run: |
           mkdir -p data
