@@ -35,7 +35,7 @@
   nav button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
   .toolbar{display:flex;gap:10px;align-items:center;margin:0 0 12px;flex-wrap:wrap}
-  select,input[type=search]{padding:8px 12px;border:1px solid var(--line);
+  select,input[type=search],input[type=text]{padding:8px 12px;border:1px solid var(--line);
     border-radius:8px;background:var(--panel);font-size:14px;color:var(--ink)}
   input[type=search]{min-width:220px}
 
@@ -84,7 +84,7 @@
   .srow .bar{width:100%}
   h3.sect{font-size:12px;color:var(--muted);text-transform:uppercase;
     letter-spacing:.06em;margin:16px 0 8px;border-top:1px solid var(--line);
-    padding-top:12px}
+    padding-top:12px;display:flex;align-items:center;gap:8px}
   .irow{display:grid;grid-template-columns:130px 1fr auto;gap:10px;
     align-items:center;font-size:13px;padding:4px 0}
   .irow .lab{color:var(--muted);font-size:12.5px}
@@ -94,6 +94,28 @@
   .dot{width:8px;height:8px;border-radius:50%;flex:none;position:relative;top:1px}
   .reasons{font-size:13px;color:var(--muted);margin-top:12px}
   .reasons li{margin-left:18px}
+
+  /* rencana trading */
+  .track{position:relative;height:16px;border-radius:8px;background:var(--chip);
+    margin:14px 2px 10px}
+  .zone{position:absolute;top:0;height:100%;background:rgba(29,78,216,.18);
+    border-radius:8px}
+  .mk{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;
+    transform:translate(-50%,-50%);border:2px solid var(--panel);
+    box-shadow:0 0 0 1px rgba(22,36,61,.15)}
+  .lvl{display:grid;grid-template-columns:14px 1fr auto auto;gap:10px;
+    align-items:center;font-size:13px;padding:4px 0}
+  .lvl .nm{color:var(--muted)}
+  .lvl .pc{font-size:12px;min-width:58px;text-align:right}
+  .calc{background:var(--chip);border-radius:10px;padding:12px 14px;margin-top:14px}
+  .calc label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+  .calc input{width:100%;max-width:240px}
+  .calc table{min-width:0;width:100%;font-size:13px;margin-top:10px}
+  .calc td{padding:4px 6px}
+  .calc td:first-child{text-align:left;color:var(--muted)}
+  .cnote{font-size:11.5px;color:var(--muted);margin-top:8px}
+  .copybtn{margin-top:12px;border:1px solid var(--line);background:var(--panel);
+    color:var(--ink);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px}
   @media (max-width:560px){ .tile{min-width:calc(50% - 10px)} }
 </style>
 </head>
@@ -151,6 +173,7 @@
 const S = { data:{}, tab:"top20", cat:"top_growth", q:"", prev:undefined };
 const $ = id => document.getElementById(id);
 const bust = "?t=" + Date.now();
+const LOT = 100;
 
 const fmtN = new Intl.NumberFormat("id-ID");
 const num  = (v,d=1) => v==null ? "—" : Number(v).toLocaleString("id-ID",
@@ -277,7 +300,116 @@ function newsSection(r){
     ${hs.length ? hs.map(h=>`
       <div class="hl"><span class="dot" style="background:${dot(h.s)}"></span>
         <span class="dt mono">${esc(h.d)}</span><span>${esc(h.t)}</span></div>`).join("")
-      : '<div class="reasons">Tidak ada berita ter-index untuk emiten ini — skor News/Sentiment "Data Tidak Cukup", bobot dinormalisasi.</div>'}`;
+      : '<div class="reasons">Tidak ada berita ter-index untuk emiten ini.</div>'}`;
+}
+
+/* ---------- Rencana Trading ---------- */
+function planLevels(r){
+  const bl = r.buy_area_low, bh = r.buy_area_high ?? r.harga;
+  return {
+    sl: r.stop_loss, bl, bh,
+    avg: r.average_buy ?? r.harga,
+    now: r.harga,
+    tps: [["TP1", r.take_profit_1], ["TP2", r.take_profit_2], ["TP3", r.take_profit_3]]
+      .filter(([,v]) => v!=null && r.harga!=null && v > r.harga * 0.995),
+  };
+}
+
+function tradeSection(r){
+  const P = planLevels(r);
+  if(!P.now || (!P.sl && !P.tps.length)) return "";
+  const vals = [P.sl, P.bl, P.now, ...P.tps.map(t=>t[1])].filter(v=>v!=null);
+  const lo = Math.min(...vals)*0.985, hi = Math.max(...vals)*1.015;
+  const pos = v => ((v-lo)/(hi-lo)*100).toFixed(1);
+  const pcOf = v => v==null||!P.now ? "—" : pct((v-P.now)/P.now*100);
+
+  const zone = P.bl!=null ?
+    `<div class="zone" style="left:${pos(P.bl)}%;width:${(pos(P.bh)-pos(P.bl)).toFixed(1)}%"></div>` : "";
+  const mks = [
+    P.sl!=null ? `<div class="mk" style="left:${pos(P.sl)}%;background:var(--down)" title="Stop Loss"></div>` : "",
+    `<div class="mk" style="left:${pos(P.now)}%;background:var(--ink)" title="Harga sekarang"></div>`,
+    ...P.tps.map(([n,v])=>`<div class="mk" style="left:${pos(v)}%;background:var(--up)" title="${n}"></div>`),
+  ].join("");
+
+  const lvl = (color,nm,val,pc) => `<div class="lvl">
+      <span class="dot" style="background:${color}"></span>
+      <span class="nm">${nm}</span><b class="mono">${val}</b>
+      <span class="pc mono ${pc.startsWith("+")?"pos":pc.startsWith("-")?"neg":""}">${pc}</span></div>`;
+
+  const rows = [
+    ...[...P.tps].reverse().map(([n,v])=>lvl("var(--up)", n, rp(v), pcOf(v))),
+    lvl("var(--ink)", "Harga sekarang", rp(P.now), ""),
+    P.bl!=null ? lvl("var(--accent)", "Buy area", `${rp(P.bl)} – ${rp(P.bh)}`,
+      `avg ${rp(P.avg)}`) : "",
+    P.sl!=null ? lvl("var(--down)", "Stop Loss (cut loss)", rp(P.sl), pcOf(P.sl)) : "",
+  ].join("");
+
+  return `<h3 class="sect">Rencana Trading
+      ${r.rating==="BUY" ? '<span class="badge b-buy">Sinyal BUY</span>'
+        : '<span class="badge b-neutral">Referensi (bukan sinyal BUY)</span>'}
+      ${r.risk_reward!=null ? `<span class="badge b-neutral">R/R ${r.risk_reward}</span>` : ""}</h3>
+    <div class="track">${zone}${mks}</div>
+    <div>${rows}</div>
+    <div class="calc">
+      <label for="tp-modal">Simulasi modal (Rp) — hitung otomatis per lot</label>
+      <input type="text" id="tp-modal" inputmode="numeric" placeholder="contoh: 10.000.000">
+      <div id="tp-result"></div>
+      <div class="cnote">1 lot = 100 lembar · asumsi beli di average buy · belum termasuk fee broker</div>
+    </div>
+    <button class="copybtn" id="tp-copy">📋 Salin rencana</button>`;
+}
+
+function bindTrade(r){
+  const inp = $("tp-modal");
+  if(inp){
+    inp.addEventListener("input", ()=>{
+      const digits = inp.value.replace(/\D/g,"");
+      inp.value = digits ? fmtN.format(Number(digits)) : "";
+      renderCalc(r, Number(digits||0));
+    });
+  }
+  const btn = $("tp-copy");
+  if(btn) btn.addEventListener("click", async ()=>{
+    const P = planLevels(r);
+    const lines = [
+      `${r.kode} — Rencana Trading (${r.rating})`,
+      P.bl!=null ? `Buy area : ${rp(P.bl)} – ${rp(P.bh)} (avg ${rp(P.avg)})` : null,
+      ...P.tps.map(([n,v])=>`${n}      : ${rp(v)}`),
+      P.sl!=null ? `Stop Loss: ${rp(P.sl)}` : null,
+      r.risk_reward!=null ? `R/R      : ${r.risk_reward}` : null,
+      `(Screener otomatis — bukan nasihat keuangan)`,
+    ].filter(Boolean).join("\n");
+    try{ await navigator.clipboard.writeText(lines); btn.textContent="✓ Tersalin"; }
+    catch(e){ btn.textContent="Gagal menyalin"; }
+    setTimeout(()=>btn.textContent="📋 Salin rencana", 1800);
+  });
+}
+
+function renderCalc(r, modal){
+  const out = $("tp-result");
+  if(!out) return;
+  const P = planLevels(r);
+  const buy = P.avg;
+  if(!modal || !buy){ out.innerHTML=""; return; }
+  const lots = Math.floor(modal / (buy * LOT));
+  if(lots < 1){
+    out.innerHTML = `<div class="cnote" style="color:var(--warn)">
+      Modal belum cukup untuk 1 lot (butuh ± Rp ${fmtN.format(Math.ceil(buy*LOT))}).</div>`;
+    return;
+  }
+  const sh = lots * LOT, cost = sh * buy;
+  const row = (nm, target) => {
+    if(target==null) return "";
+    const pl = (target - buy) * sh;
+    return `<tr><td>${nm} (${rp(target)})</td>
+      <td class="mono ${cls(pl)}">${pl>0?"+":""}${fmtN.format(Math.round(pl))}</td>
+      <td class="mono ${cls(pl)}">${pct((target-buy)/buy*100)}</td></tr>`;
+  };
+  out.innerHTML = `<table>
+    <tr><td>Posisi</td><td class="mono" colspan="2">${lots} lot (${fmtN.format(sh)} lembar) ≈ Rp ${fmtN.format(Math.round(cost))}</td></tr>
+    ${P.tps.map(([n,v])=>row("Profit di "+n, v)).join("")}
+    ${row("Rugi di Stop Loss", P.sl)}
+  </table>`;
 }
 
 function detail(r){
@@ -290,11 +422,9 @@ function detail(r){
   const kv = [
     ["Harga", rp(r.harga)], ["Fair value", rp(r.fair_value)],
     ["Upside", pct(r.upside_pct)], ["Support", rp(r.support)],
-    ["Resistance", rp(r.resistance)], ["Take Profit 1", rp(r.take_profit_1)],
-    ["Take Profit 2", rp(r.take_profit_2)], ["Take Profit 3", rp(r.take_profit_3)],
-    ["Stop Loss", rp(r.stop_loss)], ["Risk/Reward", r.risk_reward??"—"],
-    ["RSI 14", num(r.rsi,0)], ["Perubahan 3 bln", pct2(r.change_3m)],
-    ["Dividend yield", pct2(r.dividend_yield)], ["Net asing (hari ini)", num(r.foreign_net,0)],
+    ["Resistance", rp(r.resistance)], ["RSI 14", num(r.rsi,0)],
+    ["Perubahan 3 bln", pct2(r.change_3m)], ["Dividend yield", pct2(r.dividend_yield)],
+    ["Net asing (hari ini)", num(r.foreign_net,0)],
     ["Nilai transaksi rata2", cap(r.daily_value_avg)],
   ];
   $("d-body").innerHTML =
@@ -302,6 +432,8 @@ function detail(r){
       <div class="srow"><span>${l}</span>
       <div class="bar"><i style="width:${v??0}%"></i></div>
       <span class="mono">${num(v)}</span></div>`).join("")}</div>
+     ${tradeSection(r)}
+     <h3 class="sect">Data Kunci</h3>
      <div class="grid">${kv.map(([l,v])=>`
       <div class="kv"><span>${l}</span><b class="mono">${v}</b></div>`).join("")}</div>
      ${techSection(r)}
@@ -309,6 +441,7 @@ function detail(r){
      ${r.rating_reasons&&r.rating_reasons.length ?
       `<div class="reasons"><b>Catatan:</b><ul>${
         r.rating_reasons.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}`;
+  bindTrade(r);
   $("detail").showModal();
 }
 
